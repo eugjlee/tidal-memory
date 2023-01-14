@@ -33,4 +33,37 @@ float SurfFbm(float2 p)
          + 0.167 * SurfVNoise(p * 4.71 + 13.1);
 }
 
+float SurfCells(float2 p)
+{
+    float2 ip = floor(p);
+    float2 fr = frac(p);
+    float f1 = 8.0;
+    [unroll]
+    for (int cy = -1; cy <= 1; cy++)
+    [unroll]
+    for (int cx = -1; cx <= 1; cx++)
+    {
+        float2 g = float2(cx, cy);
+        float2 o = SurfHash22(ip + g);
+        float2 r = g + o - fr;
+        f1 = min(f1, dot(r, r));
+    }
+    return saturate(1.0 - sqrt(f1));
+}
+
+float SurfRipple(float2 uv, float t, float scale, float amp, float speed)
+{
+    float2 sq = float2(0.32, 1.0);
+    float h;
+    h  = 0.600 * (SurfVNoise(uv * scale * sq
+                + float2(0.09, -0.31) * t * speed) - 0.5);
+    h += 0.200 * (SurfVNoise(uv * scale * sq * 2.17 + 7.3
+                + float2(-0.17, 0.23) * t * speed * 1.6) - 0.5);
+    h += 0.070 * (SurfVNoise(uv * scale * sq * 4.63 + 19.1
+                + float2(0.27, 0.11) * t * speed * 2.4) - 0.5);
+    h += 0.025 * (SurfVNoise(uv * scale * sq * 9.11 + 41.7
+                + float2(-0.07, -0.19) * t * speed * 3.1) - 0.5);
+    return h * amp;
+}
+
 #endif
