@@ -66,4 +66,46 @@ float SurfRipple(float2 uv, float t, float scale, float amp, float speed)
     return h * amp;
 }
 
+float2 SurfCellF1F2(float2 p)
+{
+    float2 ip = floor(p);
+    float2 fr = frac(p);
+    float f1 = 8.0;
+    float f2 = 8.0;
+    [unroll]
+    for (int cy = -1; cy <= 1; cy++)
+    [unroll]
+    for (int cx = -1; cx <= 1; cx++)
+    {
+        float2 g = float2(cx, cy);
+        float2 o = SurfHash22(ip + g);
+        float d = length(g + o - fr);
+        if (d < f1) { f2 = f1; f1 = d; }
+        else if (d < f2) { f2 = d; }
+    }
+    return float2(f1, f2);
+}
+
+float SurfFoamWalls(float2 p, float thickness)
+{
+    float2 f = SurfCellF1F2(p);
+    return 1.0 - smoothstep(0.0, max(thickness, 1e-3), f.y - f.x);
+}
+
+float SurfFoamRaft(float2 uv, float2 fl, float adv, float scale)
+{
+    float2 p = uv - fl * adv;
+
+    float sv = 0.62 + 0.76 * SurfFbm(p * 9.0);
+
+    float w = SurfFoamWalls(p * scale * sv * float2(0.85, 1.0), 0.16);
+    w = max(w, SurfFoamWalls(p * scale * sv * 2.7 + 17.3, 0.13) * 0.80);
+    w = max(w, SurfFoamWalls(p * scale * sv * 6.3 + 41.7, 0.10) * 0.55);
+
+    w *= 0.35 + 0.85 * SurfFbm(p * scale * 0.55 + 71.3);
+
+    float cover = smoothstep(0.28, 0.74, SurfFbm(p * 14.0 + 5.5));
+    return saturate(w * (0.20 + 1.20 * cover));
+}
+
 #endif
