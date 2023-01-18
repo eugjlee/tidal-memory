@@ -126,4 +126,14 @@ float SurfCapsule(float2 uv, float4 seg, float radius)
     return m * m;
 }
 
+float _SurfTime;
+
+sampler2D _BioHeightTex;
+sampler2D _BioFlowTex;
+sampler2D _BioEnergyTex;
+sampler2D _BioGlowTex;
+sampler2D _CurrentDyeTex;
+float4 _BioFloorSize;
+float2 _BioTexel;
+
 #endif
