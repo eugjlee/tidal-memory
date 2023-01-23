@@ -106,5 +106,65 @@ Shader "Hidden/BioFloor/Sim"
             }
             ENDCG
         }
+
+        Pass
+        {
+            CGPROGRAM
+            #pragma vertex vert
+            #pragma fragment frag
+            #pragma target 3.0
+            float _FlowScale;
+            float _FlowSpeed;
+            float _FlowDrift;
+            float4 _FlowBias;
+            float _SwirlRadius;
+            float _SwirlStrength;
+            float _SwirlInflow;
+            float _CurrentCount;
+            float _CurrentWidth;
+            float _CurrentAnimSpeed;
+
+            float Potential(float2 p, float t)
+            {
+                float d = t * _FlowDrift;
+                float s = SurfFbm(p * _FlowScale + float2(0.0, d)) - 0.5;
+                s += (SurfFbm(p * _FlowScale * 2.3 + float2(d * 0.7, 11.3)) - 0.5) * 0.22;
+                s += (SurfFbm(p * _FlowScale * 5.1 + float2(-d * 0.4, 27.7)) - 0.5) * 0.055;
+                return s;
+            }
+
+            float4 frag(v2f i) : SV_Target
+            {
+                float2 uv = i.uv;
+                float t = _SurfTime;
+
+                float e = 0.02;
+                float dx = Potential(uv + float2(e, 0), t) - Potential(uv - float2(e, 0), t);
+                float dy = Potential(uv + float2(0, e), t) - Potential(uv - float2(0, e), t);
+                float2 flow = float2(dy, -dx) * (0.5 / e) * _FlowSpeed;
+
+                flow += _FlowBias.xy * _FlowSpeed;
+
+                [loop]
+                for (int k = 0; k < _DisturbCount; k++)
+                {
+                    if (_DisturbDir[k].z < 0.5 || _Disturb[k].z <= 0.0)
+                        continue;
+                    float2 dv = uv - _Disturb[k].xy;
+                    float r = length(dv);
+                    float R = max(_SwirlRadius, 1e-4);
+                    if (r > R * 3.0) continue;
+                    float2 tang = float2(-dv.y, dv.x) / max(r, 1e-4);
+
+                    float fall = exp(-(r * r) / (R * R));
+                    flow += tang * fall * _SwirlStrength * _Disturb[k].z;
+
+                    flow -= (dv / max(r, 1e-4)) * fall * _SwirlInflow * _Disturb[k].z;
+                }
+
+                return float4(flow, 0.0, 1);
+            }
+            ENDCG
+        }
     }
 }
