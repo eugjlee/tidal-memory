@@ -166,5 +166,49 @@ Shader "Hidden/BioFloor/Sim"
             }
             ENDCG
         }
+
+        Pass
+        {
+            CGPROGRAM
+            #pragma vertex vert
+            #pragma fragment frag
+            #pragma target 3.0
+            sampler2D _MainTex;
+            float4 _DyeSource[12];
+            int _DyeSourceCount;
+            float _DyeDecay;
+            float _DyeAdvect;
+            float _DyeDiffuse;
+
+            float4 frag(v2f i) : SV_Target
+            {
+                float2 uv = i.uv;
+                float2 tx = _TexelSize.xy;
+                float2 flow = tex2D(_BioFlowTex, uv).rg;
+
+                float2 src = uv - flow * _Dt * _DyeAdvect;
+                float d = tex2D(_MainTex, src).r;
+
+                float b = (tex2D(_MainTex, src + float2(tx.x, 0)).r
+                         + tex2D(_MainTex, src - float2(tx.x, 0)).r
+                         + tex2D(_MainTex, src + float2(0, tx.y)).r
+                         + tex2D(_MainTex, src - float2(0, tx.y)).r) * 0.25;
+
+                d = lerp(d, b, saturate(1.0 - exp(-_DyeDiffuse * _Dt)));
+
+                d *= exp(-_DyeDecay * _Dt);
+
+                [loop]
+                for (int k = 0; k < _DyeSourceCount; k++)
+                {
+                    float4 S = _DyeSource[k];
+                    float2 q = (uv - S.xy) / max(S.z, 1e-5);
+                    d += exp(-dot(q, q) * 2.0) * S.w * _Dt;
+                }
+
+                return float4(saturate(d), 0, 0, 1);
+            }
+            ENDCG
+        }
     }
 }
