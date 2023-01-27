@@ -82,6 +82,16 @@ namespace BioFloor
         float currentSourceRadius = 0.38f;
         [SerializeField, Range(0f, 4f)] float currentSourceStrength = 0.9f;
 
+        [Header("Web")]
+        [SerializeField, Range(0f, 0.3f), Tooltip("How fast the connected network feeds the current density. The web is a continuous lattice of filaments across the whole floor, so nothing starts or ends anywhere")]
+        float webFeed = 0.04f;
+        [SerializeField, Range(0.8f, 6f), Tooltip("Cell size of the network in metres")]
+        float webCellMetres = 2.6f;
+        [SerializeField, Range(0.03f, 0.5f), Tooltip("Filament thickness, as a fraction of a cell")]
+        float webThickness = 0.13f;
+        [SerializeField, Range(0f, 0.1f), Tooltip("How fast the lattice itself deforms and reconnects")]
+        float webDrift = 0.012f;
+
         [Header("People")]
         [SerializeField, Range(0.01f, 0.5f), Tooltip("Radius of the swirl a standing person makes, in field widths")]
         float swirlRadius = 0.085f;
@@ -160,6 +170,10 @@ namespace BioFloor
         [SerializeField, Range(0f, 4f)] float exposure = 1f;
         [SerializeField, Range(0f, 4f), Tooltip("Overall gain on the particle layer")]
         float bloomContribution = 1f;
+        [SerializeField, ColorUsage(false, true), Tooltip("Body colour of a spark. Electric blue: the sparks carry the blue and only their cores go pale")]
+        Color particleBaseColor = new Color(0.03f, 0.34f, 0.95f);
+        [SerializeField, ColorUsage(false, true)]
+        Color particleHighlightColor = new Color(0.15f, 0.75f, 1f);
 
         [Header("Input")]
         [SerializeField] MonoBehaviour disturbanceSource;
@@ -245,6 +259,13 @@ namespace BioFloor
             foreach (var rt in All()) Clear(rt);
         }
 
+        public void ResetAndPrewarm()
+        {
+            ResetSimulation();
+            Push();
+            Prewarm();
+        }
+
         void Update()
         {
             if (_mat == null) return;
@@ -314,10 +335,13 @@ namespace BioFloor
                 float bx = Mathf.PerlinNoise(i * 5.13f, t * sourceDrift) - 0.5f;
                 float by = Mathf.PerlinNoise(i * 9.71f + 31f, t * sourceDrift) - 0.5f;
 
-                float span = (i + 0.5f) / n;
-                Vector2 uv = new Vector2(
-                    -0.05f + span * 0.35f + bx * 0.28f,
-                    0.08f + span * 0.84f + by * 0.30f);
+                float rad = Mathf.Sqrt((i + 0.5f) / n) * 0.46f;
+                Vector2 uv = new Vector2(0.42f, 0.5f)
+                    + new Vector2(Mathf.Cos(a), Mathf.Sin(a)) * rad
+                    + new Vector2(bx, by) * 0.30f;
+
+                uv.x = Mathf.Clamp(uv.x, 0.08f, 0.92f);
+                uv.y = Mathf.Clamp(uv.y, 0.08f, 0.92f);
                 float ruv = currentSourceRadius / Mathf.Max(Map.FloorWidth, 1e-3f);
                 _srcArr[i] = new Vector4(uv.x, uv.y, ruv, currentSourceStrength);
             }
@@ -400,6 +424,10 @@ namespace BioFloor
             _mat.SetFloat("_BreakupHigh", breakupHigh);
             _mat.SetFloat("_BreakupMin", breakupMin);
             _mat.SetFloat("_CurrentFeed", currentFeed);
+            _mat.SetFloat("_WebFeed", webFeed);
+            _mat.SetFloat("_WebCell", webCellMetres);
+            _mat.SetFloat("_WebThick", webThickness);
+            _mat.SetFloat("_WebDrift", webDrift);
             _mat.SetFloat("_FlowScale", flowScale);
             _mat.SetFloat("_FlowSpeed", flowSpeed);
             _mat.SetFloat("_FlowDrift", flowDrift);
@@ -415,8 +443,8 @@ namespace BioFloor
             Shader.SetGlobalFloat("_BloomContribution", bloomContribution);
             Shader.SetGlobalFloat("_SurfaceAttachStrength", 0f);
             Shader.SetGlobalInt("_BioDebug", 0);
-            Shader.SetGlobalColor("_BaseEmissionColor", dimColor);
-            Shader.SetGlobalColor("_HighlightColor", hotColor);
+            Shader.SetGlobalColor("_BaseEmissionColor", particleBaseColor);
+            Shader.SetGlobalColor("_HighlightColor", particleHighlightColor);
             Shader.SetGlobalColor("_HotColor", hotColor);
             Shader.SetGlobalFloat("_BaseDetail", baseDetail);
             Shader.SetGlobalFloat("_SurfaceRelief", surfaceRelief);

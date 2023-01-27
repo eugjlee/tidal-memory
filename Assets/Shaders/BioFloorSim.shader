@@ -85,6 +85,8 @@ Shader "Hidden/BioFloor/Sim"
                 v *= exp(-dt / max(_Damping, 1e-3));
                 h += v * dt;
 
+                h *= exp(-dt / 3.5);
+
                 [loop]
                 for (int k = 0; k < _DisturbCount; k++)
                 {
@@ -94,10 +96,11 @@ Shader "Hidden/BioFloor/Sim"
                     if (fp < 0.002)
                         continue;
 
-                    float scale = 1.0;
                     if (_DisturbDir[k].z > 0.5)
-                        scale = _SustainedPush * (0.55 + 0.45 * sin(_SurfTime * _SustainedRate + _Disturb[k].x * 40.0));
-                    v -= fp * _Disturb[k].z * _ImpulseStrength * scale * dt;
+                        v -= fp * _Disturb[k].z * _ImpulseStrength * dt
+                           * _SustainedPush * sin(_SurfTime * _SustainedRate + _Disturb[k].x * 40.0);
+                    else
+                        v -= fp * _Disturb[k].z * _ImpulseStrength * 0.03;
                 }
 
                 h = clamp(h, -1.0, 1.0);
@@ -130,6 +133,8 @@ Shader "Hidden/BioFloor/Sim"
                 float s = SurfFbm(p * _FlowScale + float2(0.0, d)) - 0.5;
                 s += (SurfFbm(p * _FlowScale * 2.3 + float2(d * 0.7, 11.3)) - 0.5) * 0.22;
                 s += (SurfFbm(p * _FlowScale * 5.1 + float2(-d * 0.4, 27.7)) - 0.5) * 0.055;
+
+                s += (SurfFbm(p * _FlowScale * 11.7 + float2(d * 1.3, 53.1)) - 0.5) * 0.024;
                 return s;
             }
 
@@ -179,6 +184,10 @@ Shader "Hidden/BioFloor/Sim"
             float _DyeDecay;
             float _DyeAdvect;
             float _DyeDiffuse;
+            float _WebFeed;
+            float _WebCell;
+            float _WebThick;
+            float _WebDrift;
 
             float4 frag(v2f i) : SV_Target
             {
@@ -202,9 +211,30 @@ Shader "Hidden/BioFloor/Sim"
                 for (int k = 0; k < _DyeSourceCount; k++)
                 {
                     float4 S = _DyeSource[k];
-                    float2 q = (uv - S.xy) / max(S.z, 1e-5);
-                    d += exp(-dot(q, q) * 2.0) * S.w * _Dt;
+
+                    float2 fl = tex2D(_BioFlowTex, S.xy).rg;
+                    float fm = length(fl);
+                    float2 ax = fm > 1e-5 ? fl / fm : float2(1, 0);
+                    float2 dv = uv - S.xy;
+                    float2 q = float2(dot(dv, ax) / 3.5, dot(dv, float2(-ax.y, ax.x))) / max(S.z, 1e-5);
+                    d += exp(-dot(q, q) * 2.0) * S.w * 0.55 * _Dt;
                 }
+
+                {
+                    float t = _SurfTime * _WebDrift;
+                    float2 pm = uv * _BioFloorSize.xy / max(_WebCell, 1e-3);
+                    float2 warp = float2(SurfFbm(pm * 0.33 + float2(t, 3.1)),
+                                         SurfFbm(pm * 0.33 + float2(-t * 0.8, 17.7))) - 0.5;
+                    float2 pw = pm + warp * 0.9;
+                    float web = SurfFoamWalls(pw, _WebThick);
+
+                    web = max(web, SurfFoamWalls(pw * 2.15 + 23.7, _WebThick * 0.75) * 0.28);
+
+                    web *= 0.30 + 0.70 * SurfFbm(pw * 1.9 + float2(t * 2.0, 41.3));
+                    d += web * _WebFeed * _Dt;
+                }
+
+                d *= exp(-_Dt * 1.6 * saturate(d - 0.72));
 
                 return float4(saturate(d), 0, 0, 1);
             }
