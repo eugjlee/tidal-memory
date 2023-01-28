@@ -240,5 +240,136 @@ Shader "Hidden/BioFloor/Sim"
             }
             ENDCG
         }
+
+        Pass
+        {
+            CGPROGRAM
+            #pragma vertex vert
+            #pragma fragment frag
+            #pragma target 3.0
+            sampler2D _MainTex;
+            float _FastHalfLife;
+            float _MemoryHalfLife;
+            float _Diffusion;
+            float _AdvectStrength;
+            float _FootstepGlow;
+            float _CrestGlow;
+            float _CrestGain;
+            float _CrestThresholdSim;
+            float _SlopeResponse;
+            float _CurvatureResponse;
+            float _VelocityResponse;
+            float _ExcitationThreshold;
+            float _ExcitationGain;
+            float _EdgePlanktonBoost;
+            float _MemoryDensity;
+            float _AmbientPlankton;
+            float _WaveBioActivation;
+            float _WaveMemoryActivation;
+            float _WaveAdvection;
+            float _BioBreakupScale;
+            float _BreakupLow;
+            float _BreakupHigh;
+            float _BreakupMin;
+            float _CurrentFeed;
+
+            float4 frag(v2f i) : SV_Target
+            {
+                float2 uv = i.uv;
+                float2 tx = _TexelSize.xy;
+                float4 flow = tex2D(_BioFlowTex, uv);
+
+                float2 hgA = float2(
+                    tex2D(_BioHeightTex, uv + float2(tx.x, 0)).r - tex2D(_BioHeightTex, uv - float2(tx.x, 0)).r,
+                    tex2D(_BioHeightTex, uv + float2(0, tx.y)).r - tex2D(_BioHeightTex, uv - float2(0, tx.y)).r);
+                float2 waveMotion = -hgA * _WaveAdvection;
+                float2 totalFlow = flow.xy * _AdvectStrength + waveMotion;
+
+                float2 src = uv - totalFlow * _Dt;
+                float2 e = tex2D(_MainTex, src).rg;
+
+                float2 b = (tex2D(_MainTex, src + float2(tx.x, 0)).rg
+                          + tex2D(_MainTex, src - float2(tx.x, 0)).rg
+                          + tex2D(_MainTex, src + float2(0, tx.y)).rg
+                          + tex2D(_MainTex, src - float2(0, tx.y)).rg) * 0.25;
+
+                e = lerp(e, b, saturate(1.0 - exp(-_Diffusion * _Dt)));
+
+                e.r *= exp(-0.6931 * _Dt / max(_FastHalfLife, 1e-3));
+                e.g *= exp(-0.6931 * _Dt / max(_MemoryHalfLife, 1e-3));
+
+                float2 hg = float2(
+                    tex2D(_BioHeightTex, uv + float2(tx.x, 0)).r - tex2D(_BioHeightTex, uv - float2(tx.x, 0)).r,
+                    tex2D(_BioHeightTex, uv + float2(0, tx.y)).r - tex2D(_BioHeightTex, uv - float2(0, tx.y)).r);
+
+                float slope = length(hg) / max(tx.x, 1e-5);
+                float hC = tex2D(_BioHeightTex, uv).r;
+                float curv = abs(
+                      tex2D(_BioHeightTex, uv + float2(tx.x, 0)).r
+                    + tex2D(_BioHeightTex, uv - float2(tx.x, 0)).r
+                    + tex2D(_BioHeightTex, uv + float2(0, tx.y)).r
+                    + tex2D(_BioHeightTex, uv - float2(0, tx.y)).r
+                    - 4.0 * hC) / max(tx.x, 1e-5);
+                float vvel = abs(tex2D(_BioHeightTex, uv).g);
+
+                float excitation = slope * _SlopeResponse
+                                 + curv * _CurvatureResponse
+                                 + vvel * _VelocityResponse;
+                excitation = saturate((excitation - _ExcitationThreshold) * _ExcitationGain);
+
+                float curDye = tex2D(_CurrentDyeTex, uv).r;
+
+                float2 cg = float2(
+                    tex2D(_CurrentDyeTex, uv + float2(tx.x, 0)).r - tex2D(_CurrentDyeTex, uv - float2(tx.x, 0)).r,
+                    tex2D(_CurrentDyeTex, uv + float2(0, tx.y)).r - tex2D(_CurrentDyeTex, uv - float2(0, tx.y)).r);
+                float curEdge = saturate(length(cg) / max(tx.x, 1e-5) * 0.004);
+
+                float plankton = curDye
+                               + curEdge * _EdgePlanktonBoost
+                               + e.g * _MemoryDensity
+                               + _AmbientPlankton;
+
+                float breakup = smoothstep(_BreakupLow, _BreakupHigh,
+                    SurfFbm(uv * _BioBreakupScale + flow.xy * 4.0 + _SurfTime * 0.06));
+                float excited = excitation * plankton * lerp(_BreakupMin, 1.0, breakup);
+
+                e.r += excited * _WaveBioActivation * _Dt;
+                e.g += excited * _WaveMemoryActivation * _Dt;
+
+                e.r += curDye * _CurrentFeed * _Dt;
+
+                float dyeM = (tex2D(_CurrentDyeTex, uv + float2( tx.x,  tx.y) * 6.0).r
+                            + tex2D(_CurrentDyeTex, uv + float2(-tx.x,  tx.y) * 6.0).r
+                            + tex2D(_CurrentDyeTex, uv + float2( tx.x, -tx.y) * 6.0).r
+                            + tex2D(_CurrentDyeTex, uv + float2(-tx.x, -tx.y) * 6.0).r) * 0.25;
+                float ridge = saturate((curDye - dyeM) * 5.0);
+                e.r += ridge * 0.9 * _Dt;
+
+                [loop]
+                for (int k = 0; k < _DisturbCount; k++)
+                {
+                    if (_Disturb[k].z <= 0.0)
+                        continue;
+                    float fp = DisturbFootprint(uv, k);
+                    if (fp < 0.002)
+                        continue;
+
+                    if (_DisturbDir[k].z > 0.5)
+                    {
+                        float rr = length(uv - _Disturb[k].xy) / max(_Disturb[k].w, 1e-5);
+                        float rim = exp(-pow((rr - 0.85) * 2.4, 2.0));
+                        float core = 0.5 * exp(-rr * rr * 3.0);
+                        e.r += (rim + core) * _Disturb[k].z * _FootstepGlow * 0.03 * _Dt;
+                    }
+                    else
+                        e.r += fp * _Disturb[k].z * _FootstepGlow * 0.09;
+                }
+
+                e.g = max(e.g, e.r * 0.28);
+
+                return float4(saturate(e.r), saturate(e.g), 0, 1);
+            }
+            ENDCG
+        }
     }
 }
