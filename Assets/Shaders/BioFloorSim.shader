@@ -371,5 +371,40 @@ Shader "Hidden/BioFloor/Sim"
             }
             ENDCG
         }
+
+        Pass
+        {
+            CGPROGRAM
+            #pragma vertex vert
+            #pragma fragment frag
+            #pragma target 3.0
+            float4 frag(v2f i) : SV_Target
+            {
+                float2 e = tex2D(_BioEnergyTex, i.uv).rg;
+                return float4(saturate(e.r * 0.9 + e.g * 0.5), 0, 0, 1);
+            }
+            ENDCG
+        }
+
+        Pass
+        {
+            CGPROGRAM
+            #pragma vertex vert
+            #pragma fragment frag
+            #pragma target 3.0
+            sampler2D _MainTex;
+            float2 _BlurStep;
+            float4 frag(v2f i) : SV_Target
+            {
+                float2 d = _BlurStep;
+                float sum = tex2D(_MainTex, i.uv).r * 0.2270270270;
+                sum += (tex2D(_MainTex, i.uv + d * 1.3846153846).r
+                      + tex2D(_MainTex, i.uv - d * 1.3846153846).r) * 0.3162162162;
+                sum += (tex2D(_MainTex, i.uv + d * 3.2307692308).r
+                      + tex2D(_MainTex, i.uv - d * 3.2307692308).r) * 0.0702702703;
+                return float4(sum, 0, 0, 1);
+            }
+            ENDCG
+        }
     }
 }
