@@ -136,4 +136,53 @@ sampler2D _CurrentDyeTex;
 float4 _BioFloorSize;
 float2 _BioTexel;
 
+float _SpawnFilamentGain;
+float _SpawnEnergyGain;
+float _SpawnCrestGain;
+float _SpawnCrestThreshold;
+float _SpawnCurrentGain;
+
+float SurfSpawnDensity(float2 uv)
+{
+    float2 e = tex2Dlod(_BioEnergyTex, float4(uv, 0, 0)).rg;
+    float2 tx = _BioTexel;
+
+    float er = tex2Dlod(_BioEnergyTex, float4(uv + float2(tx.x, 0), 0, 0)).r;
+    float el = tex2Dlod(_BioEnergyTex, float4(uv - float2(tx.x, 0), 0, 0)).r;
+    float eu = tex2Dlod(_BioEnergyTex, float4(uv + float2(0, tx.y), 0, 0)).r;
+    float ed = tex2Dlod(_BioEnergyTex, float4(uv - float2(0, tx.y), 0, 0)).r;
+    float edge = saturate(length(float2(er - el, eu - ed)) * _SpawnFilamentGain);
+
+    float2 hg = float2(
+        tex2Dlod(_BioHeightTex, float4(uv + float2(tx.x, 0), 0, 0)).r
+      - tex2Dlod(_BioHeightTex, float4(uv - float2(tx.x, 0), 0, 0)).r,
+        tex2Dlod(_BioHeightTex, float4(uv + float2(0, tx.y), 0, 0)).r
+      - tex2Dlod(_BioHeightTex, float4(uv - float2(0, tx.y), 0, 0)).r);
+
+    float slope = length(hg) / max(tx.x, 1e-5);
+    float crest = saturate((slope - _SpawnCrestThreshold) * 0.02);
+    crest *= smoothstep(0.35, 0.85, SurfFbm(uv * 190.0 + _SurfTime * 0.07));
+    crest *= crest;
+
+    float corridor = tex2Dlod(_CurrentDyeTex, float4(uv, 0, 0)).r;
+
+    float skirt = tex2Dlod(_BioGlowTex, float4(uv, 0, 0)).r;
+
+    float drive = saturate(e.r * _SpawnEnergyGain
+                         + crest * _SpawnCrestGain
+                         + e.g * 0.12
+                         + skirt * 0.55
+                         + corridor * _SpawnCurrentGain);
+
+    float dens = pow(drive, 1.7) * (0.45 + 1.5 * edge);
+
+    float patch = SurfCells(uv * 55.0 + float2(0.0, -_SurfTime * 0.25));
+    return saturate(dens * (0.82 + 0.30 * patch));
+}
+
+float SurfElevation(float2 uv, float depth)
+{
+    return 0.0;
+}
+
 #endif
