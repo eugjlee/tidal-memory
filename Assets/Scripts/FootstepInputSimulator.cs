@@ -26,6 +26,13 @@ namespace BioFloor
         [SerializeField, Range(0f, 0.3f), Tooltip("Feet do not land on the centre line, they land either side of it")]
         float strideOffset = 0.09f;
 
+        [Header("Reference test")]
+        [SerializeField, Tooltip("F9. Deterministic comparison scene: reset, prewarm, then hold three fixed standing disturbances so every screenshot shows the same state")]
+        bool referenceTest = false;
+
+        [Tooltip("Set to a floor UV to fire one synthetic footstep there on the next frame; clears itself. Lets automated tests click without a mouse")]
+        [SerializeField] Vector2 testStepUv = Vector2.zero;
+
         [Header("Synthetic walkers")]
         [Tooltip("Walks figures across the floor with no input. For checking the water without a hand on the mouse, and for leaving the piece running unattended")]
         [SerializeField] int demoWalkers = 0;
@@ -48,9 +55,44 @@ namespace BioFloor
         void Awake() => _floor = GetComponent<BioFloorController>();
         void Reset() { view = Camera.main; }
 
+        static readonly Vector2[] RefPoints =
+        {
+            new Vector2(0.35f, 0.68f),
+            new Vector2(0.78f, 0.52f),
+            new Vector2(0.45f, 0.20f),
+        };
+
         public void CollectDisturbances(Action<BioDisturbance> sink)
         {
             if (_floor == null) _floor = GetComponent<BioFloorController>();
+
+            var kb = Keyboard.current;
+            if (kb != null && kb.f9Key.wasPressedThisFrame)
+            {
+                referenceTest = !referenceTest;
+                if (referenceTest) _floor.ResetAndPrewarm();
+            }
+            if (referenceTest)
+            {
+
+                for (int i = 0; i < RefPoints.Length; i++)
+                    sink(new BioDisturbance
+                    {
+                        Uv = RefPoints[i], Direction = Vector2.up, Strength = pressure,
+                        Radius = footRadius * 1.5f, Sustained = true
+                    });
+            }
+
+            if (testStepUv != Vector2.zero)
+            {
+                sink(new BioDisturbance
+                {
+                    Uv = testStepUv, Direction = Vector2.up, Strength = pressure,
+                    Radius = footRadius, Sustained = false
+                });
+                testStepUv = Vector2.zero;
+            }
+
             DriveDemoWalkers(sink);
             if (view == null) view = Camera.main;
             if (view == null || Mouse.current == null) return;
@@ -74,17 +116,28 @@ namespace BioFloor
             {
                 Step(sink, world);
                 _stepTimer = 0f;
-                return;
             }
 
-            if (held && dragWalks)
+            if (held)
             {
-                _stepTimer += Time.deltaTime;
-                float moved = _hasLast ? Vector3.Distance(world, _lastStep) : 999f;
-                if (_stepTimer >= stepInterval && moved >= stepDistance)
-                    Step(sink, world);
+
+                Vector2 suv = _floor.Map.WorldToUv(world);
+                if (FloorCoordinateMapper.InBounds(suv))
+                    sink(new BioDisturbance
+                    {
+                        Uv = suv, Direction = _lastDir, Strength = pressure,
+                        Radius = footRadius * 1.5f, Sustained = true
+                    });
+
+                if (dragWalks && !down)
+                {
+                    _stepTimer += Time.deltaTime;
+                    float moved = _hasLast ? Vector3.Distance(world, _lastStep) : 999f;
+                    if (_stepTimer >= stepInterval && moved >= stepDistance)
+                        Step(sink, world);
+                }
             }
-            else if (!held)
+            else
             {
                 _hasLast = false;
             }
@@ -116,7 +169,7 @@ namespace BioFloor
                     sink(new BioDisturbance
                     {
                         Uv = puv, Direction = Vector2.up, Strength = pressure,
-                        Radius = footRadius * 1.6f, Sustained = true
+                        Radius = footRadius * 1.5f, Sustained = true
                     });
 
                 _demoTimer[i] += Time.deltaTime;
@@ -135,7 +188,7 @@ namespace BioFloor
                     sink(new BioDisturbance
                     {
                         Uv = suv, Direction = dir, Strength = pressure,
-                        Radius = footRadius * 1.6f, Sustained = true
+                        Radius = footRadius * 1.5f, Sustained = true
                     });
             }
         }
