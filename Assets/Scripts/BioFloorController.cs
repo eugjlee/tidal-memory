@@ -126,11 +126,26 @@ namespace BioFloor
 
         [Header("Appearance")]
         [Tooltip("The floor at rest. A projector cannot emit black, so this is really the darkest the room will get")]
-        [SerializeField] Color deepColor = new Color(0.004f, 0.027f, 0.051f, 1f);
-        [SerializeField] Color waterColor = new Color(0.043f, 0.106f, 0.169f, 1f);
-        [SerializeField, ColorUsage(false, true)] Color cyanColor = new Color(0f, 0.741f, 0.922f);
-        [SerializeField, ColorUsage(false, true)] Color dimColor = new Color(0f, 0.294f, 0.408f);
-        [SerializeField, ColorUsage(false, true)] Color hotColor = new Color(0.722f, 0.980f, 1f);
+        [SerializeField] Color deepColor = new Color(0.020f, 0.008f, 0.045f, 1f);
+        [SerializeField] Color waterColor = new Color(0.055f, 0.030f, 0.160f, 1f);
+
+        [SerializeField, ColorUsage(false, true)] Color dimColor = new Color(0.035f, 0.020f, 0.200f);
+        [SerializeField, ColorUsage(false, true)] Color hotColor = new Color(0.850f, 0.600f, 0.800f);
+
+        [Header("Pigment")]
+        [Tooltip("The species living in this water. Each patch of the floor keeps its own pigment as the current carries it, so the room is a mixture rather than one hue graded by brightness")]
+        [SerializeField, ColorUsage(false, true)] Color pigmentBlue = new Color(0.030f, 0.100f, 1.000f);
+        [SerializeField, ColorUsage(false, true)] Color pigmentViolet = new Color(0.300f, 0.030f, 1.000f);
+        [SerializeField, ColorUsage(false, true)] Color pigmentMagenta = new Color(1.000f, 0.020f, 0.550f);
+        [SerializeField, ColorUsage(false, true)] Color pigmentCrimson = new Color(1.000f, 0.020f, 0.100f);
+        [Tooltip("The rare warm species. It does not blend: these arrive as whole discrete blooms inside the cool field")]
+        [SerializeField, ColorUsage(false, true)] Color pigmentGold = new Color(1.000f, 0.420f, 0.020f);
+        [SerializeField, Range(0f, 1f), Tooltip("0 holds the whole floor to one hue, 1 opens the full spread")]
+        float pigmentMix = 1f;
+        [SerializeField, Range(0.5f, 12f), Tooltip("Size of a single-species patch, in metres")]
+        float pigmentScaleMetres = 3.4f;
+        [SerializeField, Range(0f, 0.6f), Tooltip("How much of the floor the warm species holds")]
+        float goldAmount = 0.18f;
         [SerializeField, Range(0f, 3f)] float baseDetail = 1.1f;
         [SerializeField, Range(0f, 60f), Tooltip("How steeply the ripple field is shaded. This is what makes the fine surface texture visible at all")]
         float surfaceRelief = 14f;
@@ -170,10 +185,8 @@ namespace BioFloor
         [SerializeField, Range(0f, 4f)] float exposure = 1f;
         [SerializeField, Range(0f, 4f), Tooltip("Overall gain on the particle layer")]
         float bloomContribution = 1f;
-        [SerializeField, ColorUsage(false, true), Tooltip("Body colour of a spark. Electric blue: the sparks carry the blue and only their cores go pale")]
-        Color particleBaseColor = new Color(0.03f, 0.34f, 0.95f);
-        [SerializeField, ColorUsage(false, true)]
-        Color particleHighlightColor = new Color(0.15f, 0.75f, 1f);
+        [SerializeField, ColorUsage(false, true), Tooltip("Core of a spark. The body colour comes from the pigment of the bloom it sits in; only the core goes pale")]
+        Color particleHighlightColor = new Color(0.80f, 0.55f, 0.85f);
 
         [Header("Input")]
         [SerializeField] MonoBehaviour disturbanceSource;
@@ -436,14 +449,20 @@ namespace BioFloor
 
             Shader.SetGlobalColor("_DeepColor", deepColor.linear);
             Shader.SetGlobalColor("_WaterColor", waterColor.linear);
-            Shader.SetGlobalColor("_CyanColor", cyanColor);
             Shader.SetGlobalColor("_DimColor", dimColor);
+            Shader.SetGlobalColor("_PigmentBlue", pigmentBlue);
+            Shader.SetGlobalColor("_PigmentViolet", pigmentViolet);
+            Shader.SetGlobalColor("_PigmentMagenta", pigmentMagenta);
+            Shader.SetGlobalColor("_PigmentCrimson", pigmentCrimson);
+            Shader.SetGlobalColor("_PigmentGold", pigmentGold);
+            Shader.SetGlobalFloat("_PigmentMix", pigmentMix);
+            Shader.SetGlobalFloat("_PigmentScale", pigmentScaleMetres);
+            Shader.SetGlobalFloat("_GoldAmount", goldAmount);
 
             Shader.SetGlobalFloat("_BioEnabled", 1f);
             Shader.SetGlobalFloat("_BloomContribution", bloomContribution);
             Shader.SetGlobalFloat("_SurfaceAttachStrength", 0f);
             Shader.SetGlobalInt("_BioDebug", 0);
-            Shader.SetGlobalColor("_BaseEmissionColor", particleBaseColor);
             Shader.SetGlobalColor("_HighlightColor", particleHighlightColor);
             Shader.SetGlobalColor("_HotColor", hotColor);
             Shader.SetGlobalFloat("_BaseDetail", baseDetail);

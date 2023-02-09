@@ -19,7 +19,6 @@ Shader "BioFloor/BiolumWater"
             float _Exposure;
             float4 _DeepColor;
             float4 _WaterColor;
-            float4 _CyanColor;
             float4 _DimColor;
             float4 _HotColor;
             float _BaseDetail;
@@ -181,12 +180,17 @@ Shader "BioFloor/BiolumWater"
                 float dimBand = smoothstep(0.03, 0.28, e);
                 float midBand = smoothstep(0.30, 0.72, e);
 
-                float3 glow = _DimColor.rgb * dimBand * 0.85;
-                glow += _CyanColor.rgb * midBand * (0.55 + 0.9 * e);
-                glow += _HotColor.rgb * hotBand;
-                glow += _CyanColor.rgb * sparkle;
+                float gold;
+                float3 pig = BioPigment(bioUv, flow.rg, gold);
 
-                glow += _DimColor.rgb * scat * _ScatterGain;
+                float3 glow = lerp(_DimColor.rgb, pig, 0.25) * dimBand * 0.85;
+                glow += pig * midBand * (0.55 + 0.9 * e) * (1.0 + gold * 0.9);
+
+                float3 hotC = lerp(_HotColor.rgb, pig, 0.35);
+                glow += lerp(hotC, _PigmentGold.rgb, gold * 0.7) * hotBand;
+                glow += pig * sparkle;
+
+                glow += lerp(_DimColor.rgb, pig, 0.30) * scat * _ScatterGain;
 
                 col += glow;
                 return float4(col * _Exposure, 1.0);

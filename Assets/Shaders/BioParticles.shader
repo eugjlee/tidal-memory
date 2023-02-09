@@ -39,7 +39,6 @@ Shader "BioFloor/Particles"
             float _LifeMax;
             float _AirborneSprayFraction;
 
-            float4 _BaseEmissionColor;
             float4 _HighlightColor;
             float _BloomContribution;
             float _SurfaceAttachStrength;
@@ -117,8 +116,12 @@ Shader "BioFloor/Particles"
 
                 o.pos = mul(UNITY_MATRIX_VP, float4(world, 1.0));
                 o.corner = v.corner * 2.0;
-                o.color = lerp(_BaseEmissionColor.rgb, _HighlightColor.rgb, saturate(b * 0.55))
-                        * b * _BloomContribution;
+
+                float gold;
+                float3 pig = BioPigment(p, flow, gold);
+                float3 core = lerp(_HighlightColor.rgb, _PigmentGold.rgb, gold * 0.8);
+                o.color = lerp(pig, core, saturate(b * 0.55))
+                        * b * (1.0 + gold * 0.6) * _BloomContribution;
                 return o;
             }
 

@@ -142,6 +142,47 @@ float _SpawnCrestGain;
 float _SpawnCrestThreshold;
 float _SpawnCurrentGain;
 
+float4 _PigmentBlue;
+float4 _PigmentViolet;
+float4 _PigmentMagenta;
+float4 _PigmentCrimson;
+float4 _PigmentGold;
+float _PigmentMix;
+float _PigmentScale;
+float _GoldAmount;
+
+float3 BioPigment(float2 uv, float2 flow, out float gold)
+{
+
+    float2 q = uv * _BioFloorSize.xy / max(_PigmentScale, 1e-3) + flow * 4.0;
+
+    float h = SurfFbm(q + float2(_SurfTime * 0.006, -_SurfTime * 0.004));
+
+    h += (SurfFbm(q * 3.7 + 19.3) - 0.5) * 0.28;
+
+    h = saturate(0.5 + (h - 0.55) * 2.6);
+
+    h = pow(h, 1.70);
+    h = lerp(0.18, h, _PigmentMix);
+
+    float3 c = lerp(_PigmentBlue.rgb, _PigmentViolet.rgb, smoothstep(0.14, 0.46, h));
+    c = lerp(c, _PigmentMagenta.rgb, smoothstep(0.44, 0.70, h));
+    c = lerp(c, _PigmentCrimson.rgb, smoothstep(0.72, 0.94, h));
+
+    float2 gp = uv * _BioFloorSize.xy + flow * 3.0;
+    gp += (float2(SurfFbm(gp * 0.9 + 5.1), SurfFbm(gp * 0.9 + 27.3)) - 0.5) * 1.0;
+    float cells = SurfCells(gp + float2(0.0, _SurfTime * 0.01));
+    float fray = 0.85 + 0.30 * SurfFbm(gp * 4.5 + _SurfTime * 0.05);
+    float rare = smoothstep(0.50, 0.62, SurfFbm(uv * _BioFloorSize.xy * 0.55 + 71.7));
+    float dens = tex2Dlod(_CurrentDyeTex, float4(uv, 0, 0)).r;
+
+    gold = smoothstep(0.74, 0.94 - _GoldAmount * 0.20, cells * fray)
+         * rare
+         * smoothstep(0.0, 0.04, _GoldAmount)
+         * smoothstep(0.10, 0.35, dens);
+    return lerp(c, _PigmentGold.rgb, gold);
+}
+
 float SurfSpawnDensity(float2 uv)
 {
     float2 e = tex2Dlod(_BioEnergyTex, float4(uv, 0, 0)).rg;
